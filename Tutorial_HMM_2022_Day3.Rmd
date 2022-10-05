@@ -45,10 +45,7 @@ library(momentuHMM)
 ```
 
 
-```{r}
-
-```
-
+## Shark data
 
 
 ```{r,eval=F}
@@ -59,49 +56,17 @@ BlacktipB = BlacktipB %>%
   mutate(Time = as.POSIXct(Time,format = "%m/%d/%Y %H:%M")) %>% 
   mutate(day = day(Time),hour_to_sec =  as.integer(seconds(hm(format(Time, format = "%H:%M")))))
 
-BlacktipB = BlacktipB %>% group_by(Time) %>% mutate(sec = row_number()) %>% ungroup() %>% 
-  mutate(sec = case_when(hour_to_sec == 53160 ~ as.integer(sec + 55),
-                         TRUE ~ sec),
-         hour_to_sec = hour_to_sec + sec,
-         group_10s = case_when(sec <= 10 ~ 1,
-                               10 < sec & sec <= 20 ~ 2,
-                               20 < sec & sec <= 30 ~ 3,
-                               30 < sec & sec <= 40~ 4,
-                               40 < sec & sec <= 50 ~ 5,
-                               50 < sec & sec <= 60 ~ 6,
-                               TRUE ~ -1),
-         group_30s = case_when(sec <= 30 ~ 1,
-                               30 < sec & sec <= 60 ~ 2,
-                               TRUE ~ -1)) %>% 
-  group_by(Time,group_10s) %>% mutate(ODBA_mean_10s = mean(ODBA)) %>% ungroup() %>% 
-  group_by(Time,group_30s) %>% mutate(ODBA_mean_30s = mean(ODBA)) %>% ungroup() %>% 
-  group_by(Time) %>% mutate(ODBA_mean_60s = mean(ODBA)) %>%
-  mutate(hour_to_sec_10s = floor((hour_to_sec-1)/10+1),
-         hour_to_sec_30s = floor((hour_to_sec-1)/30+1),
-         hour_to_sec_60s = floor((hour_to_sec-1)/60+1)) 
-
 ```
 
 ```{r,echo=F}
 
 BlacktipB = readRDS("BlacktipB_tidy.rds")
 
+BlacktipB = BlacktipB %>% select(Time,Temp,Depth,ODBA,day,hour_to_sec)
 head(BlacktipB)
 
 ```
 
-```{r}
-
-BlacktipB_10s = BlacktipB %>% group_by(Time,group_10s) %>% filter(row_number() == 1) %>%
-  ungroup() %>% select(Time,Depth,ODBA_mean_10s,hour_to_sec_10s)
-BlacktipB_30s = BlacktipB %>% group_by(Time,group_30s) %>% filter(row_number() == 1) %>% 
-  ungroup() %>% select(Time,Depth,ODBA_mean_30s,hour_to_sec_30s)
-BlacktipB_60s = BlacktipB %>% group_by(Time) %>% filter(row_number() == 1) %>% 
-  ungroup() %>% select(Time,Depth,ODBA_mean_60s,hour_to_sec_60s)
-
-BlacktipB = BlacktipB %>% select(Time,Depth,ODBA,hour_to_sec)
-
-```
 
 ```{r,echo=F}
 
@@ -125,21 +90,18 @@ knitr::include_graphics("plots/timeSeriesODBA_constrained.png")
 
 ```
 
+## Fitting our model
+
+Now that the data is ready for modeling, we chose to fit a 2-stated hidden Markov model. For this purpose, we first need to assign the class `momentuHMMData` to the data in order to be presentable for the functiones related to `momentuHMM`.
 
 ```{r}
 
 BlacktipBData = prepData(BlacktipB,coordNames = NULL,
                    covNames = "hour_to_sec")
 
-BlacktipBData_10s = prepData(BlacktipB_10s,coordNames = NULL,
-                   covNames = "hour_to_sec_10s")
-
-BlacktipBData_30s = prepData(BlacktipB_30s,coordNames = NULL,
-                   covNames = "hour_to_sec_30s")
-
-BlacktipBData_60s = prepData(BlacktipB_60s,coordNames = NULL,
-                   covNames = "hour_to_sec_60s")
 ```
+
+Now, for choossing initial values for the distribution of ODBA, we take a look at the histogram of ODBA, which seems to have a peak in .1 and .2.
 
 ```{r}
 
@@ -161,7 +123,7 @@ fit1
 
 ```
 
-```{r,eval=F}
+```{r,eval=F,echo=F}
 
 fit1_10s = fitHMM(BlacktipBData,nbStates=2,dist=list(ODBA_mean_10s="gamma"),
                   Par0 = list(ODBA_mean_10s=c(.1,.3,1,1)))
@@ -169,7 +131,7 @@ fit1_10s
 
 ```
 
-```{r}
+```{r,echo=F,eval=F}
 
 fit1_10s = readRDS("BlacktipB_m1_10s.rds")
 fit1_10s
@@ -178,7 +140,7 @@ fit1_10s
 
 
 
-```{r,eval=F}
+```{r,eval=F,echo=F}
 
 fit1_30s = fitHMM(BlacktipBData,nbStates=2,dist=list(ODBA_mean_30s="gamma"),
                   Par0 = list(ODBA_mean_30s=c(.1,.3,1,1)))
@@ -186,7 +148,7 @@ fit1_30s
 
 ```
 
-```{r}
+```{r,eval=F,echo=F}
 
 fit1_30s = readRDS("BlacktipB_m1_30s.rds")
 fit1_30s
@@ -195,7 +157,8 @@ fit1_30s
 
 
 
-```{r,eval=F}
+```{r,eval=F,echo=F}
+
 fit1_60s = fitHMM(BlacktipBData,nbStates=2,dist=list(ODBA_mean_60s="gamma"),
                   Par0 = list(ODBA_mean_60s=c(.1,.3,1,1)))
 fit1_60s
@@ -203,7 +166,7 @@ fit1_60s
 
 ```
 
-```{r}
+```{r,eval=F,echo=F}
 
 fit1_60s = readRDS("BlacktipB_m1_60s.rds")
 fit1_60s
@@ -235,7 +198,7 @@ fit2
 
 ```
 
-```{r,eval=F}
+```{r,eval=F,echo=F}
 
 formula_10s = ~ cosinor(hour_to_sec_10s, period = 8640)
 Par0_fit2_10s <- getPar0(model=fit1_10s, formula=formula_10s)
@@ -247,7 +210,7 @@ fit2_10s
 
 ```
 
-```{r}
+```{r,eval=F,echo=F}
 
 fit2_10s = readRDS("BlacktipB_m2_10s.rds")
 fit2_10s
@@ -256,7 +219,7 @@ fit2_10s
 
 
 
-```{r,eval=F}
+```{r,eval=F,echo=F}
 
 formula_30s = ~ cosinor(hour_to_sec_30s, period = 2880)
 Par0_fit2_30s <- getPar0(model=fit1_30s, formula=formula_30s)
@@ -267,7 +230,7 @@ fit2_30s
 
 ```
 
-```{r}
+```{r,eval=F,echo=F}
 
 fit2_30s = readRDS("BlacktipB_m2_30s.rds")
 fit2_30s
@@ -276,7 +239,7 @@ fit2_30s
 
 
 
-```{r,eval=F}
+```{r,eval=F,echo=F}
 
 formula_60s = ~ cosinor(hour_to_sec_60s, period = 1440)
 Par0_fit2_60s <- getPar0(model=fit1_60s, formula=formula_60s)
@@ -288,7 +251,7 @@ fit2_60s
 
 ```
 
-```{r}
+```{r,eval=F,echo=F}
 
 fit2_60s = readRDS("BlacktipB_m2_60s.rds")
 fit2_60s
