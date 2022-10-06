@@ -32,6 +32,7 @@ library(momentuHMM)
 library(ggplot2)
 library(dplyr)
 library(lubridate)
+library(data.tree)
 ```
 
 ```{r,echo=F,message=FALSE}
@@ -133,10 +134,6 @@ BlacktipBData = prepData(BlacktipB,coordNames = NULL,
 
 Now, for choosing initial values for the distribution of ODBA, we take a look at the histogram of ODBA, which seems to have a peak in .1 and .3. So this will be the initial values for each of the state-dependent distributions. As well, since
 
-Let's explore the results.
-
-Akaike information criteria (AIC)
-
 Think about mentioning something related to filtering values bigger than .4. This only helps see the histogram better, but it's important information that does not necessarily be making things more complicated.
 
 ```{r}
@@ -209,7 +206,13 @@ fit1_60s
 
 ```
 
-```{r}
+```{r,eval=F}
+
+plot(fit1,breaks = 80)
+
+```
+
+```{r,echo=F}
 
 knitr::include_graphics("fit1_plot.png")
 
@@ -297,17 +300,31 @@ fit2_60s
 
 ```
 
-```{r}
+```{r,eval=F}
 
-knitr::include_graphics("fit1.jpg")
+plot(fit2)
 
 ```
+
+```{r,echo=F}
+
+knitr::include_graphics("fit2_plot.png")
+
+```
+
+
+Let's explore the results.
+
+Akaike information criteria (AIC)
+
 
 # Hierarchical Hidden Markov models
 
 ```{r}
+
 # Read the data
 tigerShark <- read_csv("tigershark_depthchange10min.csv")
+tigerShark = tigerShark %>% mutate(change_depth = Depth - lag(Depth,default = 0))
 head(tigerShark)
 
 ```
@@ -316,14 +333,137 @@ head(tigerShark)
 ```{r}
 
 tigerShark %>%
-  filter(days != 9) %>% 
+  filter(days != 9) %>%
   ggplot(aes(x=HST,y=Depth)) + facet_wrap(~days,scales = "free_x") + geom_line() +
   scale_x_datetime(breaks= "8 hour", date_labels = "%H:%M") + theme_minimal()
 
-tigerShark %>% mutate(change_depth = Depth - lag(Depth,default = 0)) %>%
-  filter(days != 9) %>% 
+
+tigerShark %>% filter(days != 9) %>% 
   ggplot(aes(x=HST,y=2*abs(change_depth))) + facet_wrap(~days,scales = "free_x") + geom_line() +
   scale_x_datetime(breaks= "8 hour", date_labels = "%H:%M") + theme_minimal()
+
+```
+
+
+```{r}
+
+days_range = unique(tigerShark$days)
+tigerSharkData <- NULL
+
+for(i in days_range){
+  coarseInd <- data.frame(tigerShark %>% filter(days == i) %>% 
+                                   filter(row_number() == 1) %>% select(HST),
+                                 days = i,
+                                 level=c("1","2i"),
+                                 change_depth=NA)
+  tmp <- rbind(coarseInd,tigerShark %>% filter(days == i) %>% mutate(level = "2") %>% 
+                 select(HST,days,level,change_depth))
+  tigerSharkData <- rbind(tigerSharkData,tmp)
+}
+
+head(tigerSharkData)
+
+tigerSharkData = prepData(tigerSharkData,
+                          coordNames = NULL, hierLevels = c("1","2i","2"))
+
+
+# summarize prepared data
+summary(tigerSharkData, dataNames = names(tigerSharkData)[-1])
+
+```
+
+```{r}
+
+### define hierarchical HMM
+### states 1-3 = coarse state 1 (nonforaging)
+### states 4-6 = coarse state 2 (foraging)
+hierStates <- data.tree::Node$new("tiger shark HHMM states")
+hierStates$AddChild(name="nontravelling")
+hierStates$nontravelling$AddChild(name="nt1", state=1)
+hierStates$nontravelling$AddChild(name="nt2", state=2)
+hierStates$nontravelling$AddChild(name="nt3", state=3)
+hierStates$AddChild(name="travelling")
+hierStates$travelling$AddChild(name="t1", state=4)
+hierStates$travelling$AddChild(name="t2", state=5)
+hierStates$travelling$AddChild(name="t3", state=6)
+
+plot(hierStates)
+
+```
+
+```{r,eval=F}
+
+#Alternative way for specifying
+hierStates <- data.tree::as.Node(list(name="tiger shark HHMM states",
+                                      nontravelling=list(nt1=list(state=1),
+                                                nt2=list(state=2),
+                                                nt3=list(state=3)),
+                                      travelling=list(t1=list(state=4),
+                                                    t2=list(state=5),
+                                                    t3=list(state=6))))
+
+```
+
+
+The name for any of the “children” added to a node are user-specified and are akin
+to the stateNames argument in fitHMM for a standard HMM. While these names are
+arbitrary, the name and state attributes must be unique.
+
+```{r}
+
+# data stream distributions
+# level 1 = coarse scale (no data streams)
+# level 2 = fine scale (dive_duration, maximum_depth, dive_wiggliness)
+hierDist <- data.tree::Node$new("tiger shark HHMM dist")
+hierDist$AddChild(name="level1")
+hierDist$AddChild(name="level2")
+hierDist$level2$AddChild(name="change_depth", dist="gamma")
+plot(hierDist)
+
+```
+
+
+The Node attribute dist is required in hierDist and specifies the probability dis-
+tribution for each data stream at each level of the hierarchy (Figure 14. In this case,
+level1 (corresponding to coarse-scale observations with level=1) has no data streams,
+and each of the data streams for level2 (corresponding to fine-scale observations with
+level=2) is assigned a gamma distribution. Include more information related to this from momentuHMM documentation (page 93).
+
+
+[...] did not include any covariates on the t.p.m. or initial
+distribution for either level of the hierarchy, but, for demonstration purposes, here is
+how we would use the hierFormula and hierFormulaDelta arguments to specify the
+t.p.m. and initial distribution formula for each level of the hierarchy in fitHMM:
+
+```{r}
+
+# define hierarchical t.p.m. formula(s)
+hierFormula <- data.tree::Node$new("harbor porpoise HHMM formula")
+hierFormula$AddChild(name="level1", formula=~1)
+hierFormula$AddChild(name="level2", formula=~1)
+
+# define hierarchical initial distribution formula(s)
+hierFormulaDelta <- data.tree::Node$new("harbor porpoise HHMM formulaDelta")
+hierFormulaDelta$AddChild(name="level1", formulaDelta=~1)
+hierFormulaDelta$AddChild(name="level2", formulaDelta=~1)
+
+```
+
+assume the data stream probability distributions do not
+depend on the coarse-scale state, so we can constrain the state-dependent parameters
+for states 1 (“nf1”) and 4 (“f1”), states 2 (“nf2”) and 5 (“f2”), and states 3 (“nf3”) and
+6 (“f3”) to be equal using the DM argument:
+
+```{r}
+
+# defining starting values
+cd.mu0 = rep(c(5,50,100),hierStates$count)
+cd.sigma0 = rep(c(5,15,40),hierStates$count)
+
+
+Par0 <- list(change_depth=c(cd.mu0,cd.sigma0))
+
+nbStates <- length(hierStates$Get("state",filterFun=data.tree::isLeaf))
 
 
 ```
@@ -332,3 +472,11 @@ tigerShark %>% mutate(change_depth = Depth - lag(Depth,default = 0)) %>%
 
 Before choosing anything in particular, we fitted different Hidden Markov models to different datasets, which varied in how the ODBA were considered (every 1-second, every 10 seconds, every 30 seconds, and 1 min). Looking at the ACF, we observed that, even if the model broke the conditionally dependencency assumption in the hidden process, the original dataset was still one of the best in terms of lowest autocorrelation. 
 
+
+
+# To include
+-comparison of different initial values for the distribution of ODBA for basic HMM (log-likelihood and estimated coefficients)
+-comparison of --- basic HMM with covariates (----)
+-create content for hierarchical HMM and explanation of other things
+-decide what to do with the histogram of the data
+-include the most likely pattern for the sharks (basic HMM)
