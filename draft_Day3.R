@@ -177,7 +177,7 @@ library(ggplot2)
 library(dplyr)
 
 tigerShark <- read_csv("tigershark_depthchange10min.csv")
-tigerShark = tigerShark %>% mutate(change_depth = Depth - lag(Depth,default = 0))
+tigerShark = tigerShark %>% mutate(abs_change_depth = abs(Depth - lag(Depth,default = 0)))
 
 
 tigerShark %>%
@@ -187,13 +187,12 @@ tigerShark %>%
 
 
 tigerShark %>% filter(days != 9) %>% 
-  ggplot(aes(x=HST,y=2*abs(change_depth))) + facet_wrap(~days,scales = "free_x") + geom_line() +
+  ggplot(aes(x=HST,y=2*abs_change_depth)) + facet_wrap(~days,scales = "free_x") + geom_line() +
   scale_x_datetime(breaks= "8 hour", date_labels = "%H:%M") + theme_minimal()
 
 
-tigerShark = tigerShark %>% select(HST,days,change_depth)
+tigerShark = tigerShark %>% select(HST,days,abs_change_depth)
 
-tigerShark$HST[1]
 
 #load(url(paste0("https://static-content.springer.com/esm/",
 #                "art%3A10.1007%2Fs13253-017-0282-9/MediaObjects/",
@@ -205,7 +204,7 @@ tigerShark$HST[1]
 
 #test = data.frame(tigerShark %>% filter(days == 9) %>% filter(row_number() == 1) %>% select(HST),
 #           level=c("1","2i"),
-#           change_depth=NA)
+#           abs_change_depth=NA)
 #test
 
 days_range = unique(tigerShark$days)
@@ -216,9 +215,9 @@ for(i in days_range){
                                    filter(row_number() == 1) %>% select(HST),
                                  days = i,
                                  level=c("1","2i"),
-                                 change_depth=NA)
+                                 abs_change_depth=NA)
   tmp <- rbind(coarseInd,tigerShark %>% filter(days == i) %>% mutate(level = "2") %>% 
-                 select(HST,days,level,change_depth))
+                 select(HST,days,level,abs_change_depth))
   tigerSharkData <- rbind(tigerSharkData,tmp)
 }
 
@@ -236,7 +235,7 @@ tigerSharkData
 
 library(data.tree)
 
-library(DiagrammeR)
+#library(DiagrammeR)
 ### define hierarchical HMM
 ### states 1-3 = coarse state 1 (nonforaging)
 ### states 4-6 = coarse state 2 (foraging)
@@ -269,7 +268,7 @@ plot(hierStates)
 hierDist <- data.tree::Node$new("tiger shark HHMM dist")
 hierDist$AddChild(name="level1")
 hierDist$AddChild(name="level2")
-hierDist$level2$AddChild(name="change_depth", dist="gamma")
+hierDist$level2$AddChild(name="abs_change_depth", dist="gamma")
 plot(hierDist)
 
 
@@ -286,24 +285,39 @@ hierFormulaDelta$AddChild(name="level2", formulaDelta=~1)
 # defining starting values
 cd.mu0 = rep(c(5,50,100),hierStates$count)
 cd.sigma0 = rep(c(5,15,40),hierStates$count)
+## what is pi0?? is for the zeros? ##
+cd.pi0 = rep(c(0.2,0.01,0.01),hierStates$count)
 
-Par0 = list(change_depth = c(cd.mu0,cd.sigma0))
+Par0 = list(abs_change_depth = c(cd.mu0,cd.sigma0,cd.pi0))
 
 nbStates <- length(hierStates$Get("state",filterFun=data.tree::isLeaf))
 
 # constrain fine-scale data stream distributions to be same
-cd_DM = matrix(cbind(kronecker(c(1,1,0,0),diag(3)),
-                     kronecker(c(0,0,1,1),diag(3))),
-               nrow=nbStates*2,
-               ncol=6,
-               dimnames=list(c(paste0("mean_",1:nbStates),
-                               paste0("sd_",1:nbStates)),
-                             paste0(rep(c("mean","sd"),each=3),
-                                    c("_14:(Intercept)",
-                                      "_25:(Intercept)",
-                                      "_36:(Intercept)"))))
+#cd_DM = matrix(cbind(kronecker(c(1,1,0,0),diag(3)),
+#                     kronecker(c(0,0,1,1),diag(3))),
+#               nrow=nbStates*2,
+#               ncol=6,
+#               dimnames=list(c(paste0("mean_",1:nbStates),
+#                               paste0("sd_",1:nbStates)),
+#                             paste0(rep(c("mean","sd"),each=3),
+#                                    c("_14:(Intercept)",
+#                                      "_25:(Intercept)",
+#                                      "_36:(Intercept)"))))
     
-DM = list(change_depth = cd_DM)
+# constrain fine-scale data stream distributions to be same
+cd_DM <- matrix(cbind(kronecker(c(1,1,0,0,0,0),diag(3)),
+                      kronecker(c(0,0,1,1,0,0),diag(3)),
+                      kronecker(c(0,0,0,0,1,1),diag(3))),
+                nrow=nbStates*3,
+                ncol=9,
+                dimnames=list(c(paste0("mean_",1:nbStates),
+                                paste0("sd_",1:nbStates),
+                                paste0("zeromass_",1:nbStates)),
+                              paste0(rep(c("mean","sd","zeromass"),each=3),
+                                     c("_14:(Intercept)",
+                                       "_25:(Intercept)",
+                                       "_36:(Intercept)"))))
+DM = list(abs_change_depth = cd_DM)
 
 
 # get initial parameter values for data stream probability distributions
@@ -323,57 +337,12 @@ plotPR(fit1_30s)
 plotPR(fit1_60s)
 
 
-BlacktipB %>% filter(ODBA >= .4)
-
-
-
-
-load(url(paste0("https://static-content.springer.com/esm/",
-                "art%3A10.1007%2Fs13253-017-0282-9/MediaObjects/",
-                "13253_2017_282_MOESM2_ESM.rdata")))
-# convert date_time to POSIX
-data <- lapply(data,function(x)
-{x$date_time <- as.POSIXct(x$date_time,tz="UTC"); x})
-porpoiseData <- NULL
-for(i in 1:length(data)){
-  coarseInd <- data.frame(date_time=as.POSIXct(format(data[[i]]$date_time[1],
-                                                      format="%Y-%m-%d %H:%M"),
-                                               tz="UTC"),
-                          level=c("1","2i"),
-                          dive_duration=NA,
-                          maximum_depth=NA,
-                          dive_wiggliness=NA)
-  tmp <- rbind(coarseInd,data.frame(data[[i]],level="2"))
-  porpoiseData <- rbind(porpoiseData,tmp)
-}
-
-table(porpoiseData$dive_wiggliness)
-min(porpoiseData$maximum_depth[!is.na(porpoiseData$maximum_depth)])
-
-hist(porpoiseData$maximum_depth,breaks=80)
-hist(porpoiseData$dive_wiggliness,breaks=80)
-hist(abs(tigerSharkData$change_depth),breaks=80)
-
-min(abs(tigerShark$change_depth)[!is.na(tigerShark$change_depth)])
-
-table(abs(tigerShark$change_depth))
-
-242/length(tigerShark$change_depth)
-
-518/length(porpoiseData$dive_wiggliness)
-
-dw_DM[1:(2*nbStates),1:6]
-
-
 
 # fit hierarchical HMM
 hhmm <- fitHMM(data=tigerSharkData,hierStates=hierStates,hierDist=hierDist,
                #hierFormula=hierFormula,#hierFormulaDelta=hierFormulaDelta,
                Par0=Par,#hierBeta=hierBeta,hierDelta=hierDelta,
                DM=DM,nlmPar=list(hessian=FALSE))
-
-
-### TO DO ###
-# Arreglar esto
-# Error in getDM(tempCovs, inputs$DM, inputs$dist, nbStates, inputs$p$parNames,  : 
-# DM$change_depth should consist of 18 rows
+hhmm
+#saveRDS(hhmm,"hmm.rds")
+hhmm = readRDS("hmm.rds")

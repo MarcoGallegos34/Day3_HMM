@@ -324,7 +324,7 @@ Akaike information criteria (AIC)
 
 # Read the data
 tigerShark <- read_csv("tigershark_depthchange10min.csv")
-tigerShark = tigerShark %>% mutate(change_depth = Depth - lag(Depth,default = 0))
+tigerShark = tigerShark %>% mutate(abs_change_depth = abs(Depth - lag(Depth,default = 0)))
 head(tigerShark)
 
 ```
@@ -339,7 +339,7 @@ tigerShark %>%
 
 
 tigerShark %>% filter(days != 9) %>% 
-  ggplot(aes(x=HST,y=2*abs(change_depth))) + facet_wrap(~days,scales = "free_x") + geom_line() +
+  ggplot(aes(x=HST,y=2*abs_change_depth)) + facet_wrap(~days,scales = "free_x") + geom_line() +
   scale_x_datetime(breaks= "8 hour", date_labels = "%H:%M") + theme_minimal()
 
 ```
@@ -355,9 +355,9 @@ for(i in days_range){
                                    filter(row_number() == 1) %>% select(HST),
                                  days = i,
                                  level=c("1","2i"),
-                                 change_depth=NA)
+                                 abs_change_depth=NA)
   tmp <- rbind(coarseInd,tigerShark %>% filter(days == i) %>% mutate(level = "2") %>% 
-                 select(HST,days,level,change_depth))
+                 select(HST,days,level,abs_change_depth))
   tigerSharkData <- rbind(tigerSharkData,tmp)
 }
 
@@ -417,7 +417,7 @@ arbitrary, the name and state attributes must be unique.
 hierDist <- data.tree::Node$new("tiger shark HHMM dist")
 hierDist$AddChild(name="level1")
 hierDist$AddChild(name="level2")
-hierDist$level2$AddChild(name="change_depth", dist="gamma")
+hierDist$level2$AddChild(name="abs_change_depth", dist="gamma")
 plot(hierDist)
 
 ```
@@ -459,12 +459,62 @@ for states 1 (“nf1”) and 4 (“f1”), states 2 (“nf2”) and 5 (“f2”)
 # defining starting values
 cd.mu0 = rep(c(5,50,100),hierStates$count)
 cd.sigma0 = rep(c(5,15,40),hierStates$count)
+cd.pi0 = rep(c(0.2,0.01,0.01),hierStates$count)
 
-
-Par0 <- list(change_depth=c(cd.mu0,cd.sigma0))
+Par0 = list(abs_change_depth = c(cd.mu0,cd.sigma0,cd.pi0))
 
 nbStates <- length(hierStates$Get("state",filterFun=data.tree::isLeaf))
 
+
+```
+
+```{r}
+
+# constrain fine-scale data stream distributions to be same
+cd_DM <- matrix(cbind(kronecker(c(1,1,0,0,0,0),diag(3)),
+                      kronecker(c(0,0,1,1,0,0),diag(3)),
+                      kronecker(c(0,0,0,0,1,1),diag(3))),
+                nrow=nbStates*3,
+                ncol=9,
+                dimnames=list(c(paste0("mean_",1:nbStates),
+                                paste0("sd_",1:nbStates),
+                                paste0("zeromass_",1:nbStates)),
+                              paste0(rep(c("mean","sd","zeromass"),each=3),
+                                     c("_14:(Intercept)",
+                                       "_25:(Intercept)",
+                                       "_36:(Intercept)"))))
+DM = list(abs_change_depth = cd_DM)
+
+```
+
+```{r}
+
+# get initial parameter values for data stream probability distributions
+Par <- getParDM(tigerSharkData,hierStates=hierStates,hierDist=hierDist,
+                Par=Par0,DM=DM)
+
+# check hierarchical model specification and parameters
+checkPar0(tigerSharkData,hierStates=hierStates,hierDist=hierDist,Par0=Par,
+          hierFormula=hierFormula,hierFormulaDelta=hierFormulaDelta,
+          DM=DM)
+
+```
+
+```{r,eval=F}
+
+# fit hierarchical HMM
+hhmm <- fitHMM(data=tigerSharkData,hierStates=hierStates,hierDist=hierDist,
+               #hierFormula=hierFormula,#hierFormulaDelta=hierFormulaDelta,
+               Par0=Par,#hierBeta=hierBeta,hierDelta=hierDelta,
+               DM=DM,nlmPar=list(hessian=FALSE))
+hhmm
+
+```
+
+```{r,echo=F}
+
+hhmm = readRDS("hmm.rds")
+hhmm
 
 ```
 
@@ -473,10 +523,14 @@ nbStates <- length(hierStates$Get("state",filterFun=data.tree::isLeaf))
 Before choosing anything in particular, we fitted different Hidden Markov models to different datasets, which varied in how the ODBA were considered (every 1-second, every 10 seconds, every 30 seconds, and 1 min). Looking at the ACF, we observed that, even if the model broke the conditionally dependencency assumption in the hidden process, the original dataset was still one of the best in terms of lowest autocorrelation. 
 
 
-
 # To include
+
 -comparison of different initial values for the distribution of ODBA for basic HMM (log-likelihood and estimated coefficients)
+
 -comparison of --- basic HMM with covariates (----)
+
 -create content for hierarchical HMM and explanation of other things
+
 -decide what to do with the histogram of the data
+
 -include the most likely pattern for the sharks (basic HMM)
