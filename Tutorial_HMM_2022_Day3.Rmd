@@ -46,37 +46,34 @@ library(momentuHMM)
 ```
 
 
-# Accelerometer data (Blacktip shark data)
+# Tutorial objectives
+
+The goal of this tutorial is to explore how to fit hidden Markov models to accelerometer data, the incorporation of covariates on the transition probabilities, and the implementation of hierarchical Markov models to Depth data. For the first two objectives, we will use 4 days of accelerometry data obtained from a free-ranging blacktip reef shark at Palmyra Atoll in the central Pacific Ocean (data taken from Papastamatiou et al. 2015). 
+
+Mention something about hierarchical HMM and 
+
+
+
+<!-- A multisensor package was attached to the dorsal fin of a 117-cm female shark. The multisensor data-logger (ORI400-D3GT, Little Leonardo, Tokyo, Japan) recorded three-dimensional acceleration (at 20 Hz), depth and water temperature (at 1 Hz) and was embedded in a foam float which detached from the shark after 4 days (Papastamatiou et al. 2015).  -->
+
+
+# Accelerometer data
 
 Accelerometer devices measure up to three axes, which can be described relative to the body of the animal: longitudinal (surge), lateral (sway) and dorsoventral (heave). In each case, means and variances of each of the three axes are used, as well as overall dynamic body acceleration (ODBA),
-the sum of dynamic body acceleration from the three axes, among others.
+the sum of dynamic body acceleration from the three axes, among others. In the dataset that we'll be using, the ODBA of the shark was calculated every second.
 
-ODBA is derived by smoothing over a time period, in this particular case, 1 s.
-
-we applied HMMs to accelerometry data
-obtained from a free-ranging blacktip reef shark Carcharhinus
-melanopterus at Palmyra Atoll in the central Pacific Ocean
-(data taken from Papastamatiou et al. 2015). A multisensor
-package was attached to the dorsal fin of a 117-cm female
-shark. The multisensor data-logger (ORI400-D3GT, Little
-Leonardo, Tokyo, Japan) recorded three-dimensional acceler-
-ation (at 20 Hz), depth and water temperature (at 1 Hz) and
-was embedded in a foam float which detached from the shark
-after 4 days (Papastamatiou et al. 2015). The package also
-contained a VHF transmitter allowing recovery at the surface
-after detachment.
+The dataset contains information such as the time of the observation, the "water temperature", "depth" and ODBA. Since one of our goals is to use the time of observations (second of the day) as a covariate, we need to extract this information from the Time variable.
 
 ```{r,eval=F}
-# Let's read the data
+# Reading the data
 BlacktipB <- read_delim("BlacktipB_original.txt", 
                         delim = "\t", escape_double = FALSE, 
                         trim_ws = TRUE)
-# Now, it's time to transform the date/time info into a proper time format
+# Let's transform the date/time info into a proper time format
 # In this case we need to extract the second of the day correspondent to each observation 
-# (range from 1 to 86400)
 BlacktipB = BlacktipB %>% 
   mutate(Time = as.POSIXct(Time,format = "%m/%d/%Y %H:%M")) %>% 
-  mutate(day = day(Time),hour_to_sec =  as.integer(seconds(hm(format(Time, format = "%H:%M")))))
+  mutate(hour_to_sec =  as.integer(seconds(hm(format(Time, format = "%H:%M")))))
 
 ```
 
@@ -84,12 +81,12 @@ BlacktipB = BlacktipB %>%
 
 BlacktipB = readRDS("BlacktipB_tidy.rds")
 
-BlacktipB = BlacktipB %>% select(Time,Temp,Depth,ODBA,day,hour_to_sec)
+BlacktipB = BlacktipB %>% select(Time,Temp,Depth,ODBA,hour_to_sec)
 head(BlacktipB)
 
 ```
 
-Observing at the ODBA values through the observed period, we can observe that there are some values where ODBA has unusual values greater than 2 - usually this ranges between 0 and 2. As in article, we are going to filter certain values, since these are super messy
+Looking at the ODBA values through the observed period, we find ODBA is inusually high at some times - usually this measurement is ranging between 0 and 2. Since this could cause a problem at the moment of identifying behaviours, we will take them off from the dataset.
 
 ```{r,echo=F}
 
@@ -104,7 +101,7 @@ BlacktipB = BlacktipB %>% filter(ODBA <= 2.0)
 
 ```
 
-Much better. thus, we are ready to start to look for models for this data!
+Much better. Now, we are ready to start to look for models for this data!
 
 ```{r,echo=F}
 
@@ -115,12 +112,24 @@ knitr::include_graphics("plots/timeSeriesODBA_constrained.png")
 
 # Fitting our model
 
-It's important to mention that there is some missing data (seconds at midnight were not measured), but since these are negligible, we will continue as expected.
+Given our data, we are interested in finding possible behaviours through the observation process (ODBA). Let's take a quick look at the histogram of the observations.
+
+```{r, echo=F}
+
+hist(BlacktipB$ODBA[BlacktipB$ODBA < .4],breaks=80,main="Histogram of ODBA", 
+     xlab = "ODBA")
+
+```
+
+
+As we have indicated before, the best way to start when fitting a Hidden Markov model is to keep things simple. In this case, we will be considering 2 behavioral states, and no covariates for the transition probability matrix. 
+
+
+For faciliting the search of the 2 state-dependent distributions, we need to provide some initial values so make easier the function to find such densities.
+
+As mentioned in previous tutorials, now is time to implement the decisions that we have made so far. For the choose of initial parameter we can take a quick peak at the data (e.g., using the plots above). From the plots above, it looks like the animal has OBDA values at .1 and .3. As I see it, there are probably two behaviours with different OBDA around these values.
 
 active/inactive behaviour, since
-
-Decisions. As mentioned in previous tutorials, now is time to implement the decisions that we have made so far. For the choose of initial parameter we can take a quick peak at the data (e.g., using the plots above). From the plots above, it looks like the animal has OBDA values at .1 and .3. As I see it, there are probably two behaviours with different OBDA around these values.
-
 
 
 Now that the data is ready for modeling, we chose to fit a 2-stated hidden Markov model. For this purpose, we first need to assign the class `momentuHMMData` to the data in order to be presentable for the functiones related to `momentuHMM`.
@@ -134,13 +143,10 @@ BlacktipBData = prepData(BlacktipB,coordNames = NULL,
 
 Now, for choosing initial values for the distribution of ODBA, we take a look at the histogram of ODBA, which seems to have a peak in .1 and .3. So this will be the initial values for each of the state-dependent distributions. As well, since
 
-Think about mentioning something related to filtering values bigger than .4. This only helps see the histogram better, but it's important information that does not necessarily be making things more complicated.
 
-```{r}
+Filtering observations to be lower than .4 (only a few are up to this value, and for the sake of a good visualization), we can observe that data concentrates around .1 and .3, so it seems these could be good initial values candidates for the distribution of the ODBA data.
 
-hist(BlacktipBData$ODBA[BlacktipBData$ODBA < .4],breaks=80)
 
-```
 
 ```{r,eval=F}
 
@@ -531,6 +537,5 @@ Before choosing anything in particular, we fitted different Hidden Markov models
 
 -create content for hierarchical HMM and explanation of other things
 
--decide what to do with the histogram of the data
 
 -include the most likely pattern for the sharks (basic HMM)
