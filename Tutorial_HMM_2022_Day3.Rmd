@@ -47,7 +47,7 @@ library(momentuHMM)
 ```
 
 
-*1. Tutorial goals: fit hidden Markov models to accelerometer data in momentuHMM; incorporation of covariates to such models. fit hierarchical Markov models to Depth data;*
+**1. Tutorial goals: fit hidden Markov models to accelerometer data in momentuHMM; incorporation of covariates to such models. fit hierarchical Markov models to Depth data;**
 
 
 # Tutorial objectives
@@ -56,16 +56,16 @@ The goal of this tutorial is to explore how to fit hidden Markov models to accel
 
 
 
-*2. Accelerometer data*
+**2. Accelerometer data**
 
-  *- what it is?*
+  **- what it is?**
 
 # Accelerometer data
 
 Accelerometer devices measure up to three axes, which can be described relative to the body of the animal: longitudinal (surge), lateral (sway) and dorsoventral (heave). In each case, means and variances of each of the three axes are used, as well as overall dynamic body acceleration (ODBA),
 the sum of dynamic body acceleration from the three axes, among others. In the dataset that we'll be using, the ODBA of the shark was calculated every second.
 
-  *- black tip shark data: variables*
+  **- black tip shark data: variables**
 
 The dataset contains information such as the time of the observation, the "water temperature", "depth" and ODBA. Since one of our goals is to use the time of observations (second of the day) as a covariate, we need to extract this information from the Time variable.
 
@@ -91,12 +91,12 @@ head(BlacktipB)
 
 ```
 
-*3. fitting hidden Markov model fot the data*
+**3. fitting hidden Markov model fot the data**
 
 # Fitting our model
 
 
-  *- Look at data: visualization of ODBA through observed period. Outliers? What do we do with them?*
+  **- Look at data: visualization of ODBA through observed period. Outliers? What do we do with them?**
 
 
 Looking at the ODBA values through the observed period, we find ODBA is inusually high at some times - usually this measurement is ranging between 0 and 2. Since this could cause a problem at the moment of identifying behaviours, we will take them off from the dataset.
@@ -122,9 +122,9 @@ knitr::include_graphics("plots/timeSeriesODBA_constrained.png")
 
 ```
 
-  *- histogram of ODBA.*
-      *- Values range. If all positive, what distirbutions can we assign to the data stream ? Gamma distribution would be ok?*
-      *- Can we deduce from it appropiate initial values for our two behavior distributions?*
+  **- histogram of ODBA.**
+      **- Values range. If all positive, what distirbutions can we assign to the data stream ? Gamma distribution would be ok?**
+      **- Can we deduce from it appropiate initial values for our two behavior distributions?**
 
 
 Given our data, we are interested in finding possible behaviours through the observation process (ODBA). Let's take a quick look at the histogram of the observations.
@@ -135,11 +135,6 @@ hist(BlacktipB$ODBA[BlacktipB$ODBA < .4],breaks=80,main="Histogram of ODBA",
      xlab = "ODBA")
 
 ```
-
-  - Most likely sequence: What can we infer from this? is there something else we can say from this? According to fitted model, can we see if there is any interesting pattern?
-  - Now let's incorporate more information: time (second of the day). Let's include it as a covariate in the transition probabilities.
-  - Did the likelihood had a greater value? Did the coefficients vary to much? What about the ACF? Did the autocorrelation decreased with this innovation?
-
 
 
 As we have indicated before, the best way to start when fitting a Hidden Markov model is to keep things simple. In this case, we will be considering 2 behavioral states, and no covariates for the transition probability matrix. 
@@ -161,7 +156,7 @@ BlacktipBData = prepData(BlacktipB,coordNames = NULL,
 
 ```
 
-  *- let's start simple: 2 behaviour states (resting, foraging (?)). No covariates.*
+  **- let's start simple: 2 behaviour states (resting, foraging (?)). No covariates.**
 
 
 Now, for choosing initial values for the distribution of ODBA, we take a look at the histogram of ODBA, which seems to have a peak in .1 and .3. So this will be the initial values for each of the state-dependent distributions. As well, since
@@ -178,7 +173,7 @@ fit1 = fitHMM(BlacktipBData,nbStates=2,dist=list(ODBA="gamma"),Par0 = list(ODBA=
 fit1
 ```
 
-  *- What are the estimated coefficients?*
+  **- What are the estimated coefficients?**
 
 
 ```{r,echo=F}
@@ -202,7 +197,7 @@ knitr::include_graphics("fit1_plot.png")
 ```
 
 
-  *- Let's include perturbations in the initial values. retryFits is really useful for this. Does the likelihood varies too much when doing this?*
+  **- Let's include perturbations in the initial values. retryFits is really useful for this. Does the likelihood varies too much when doing this?**
 
 
 Let's include retryFits in the fitHMM function. Seems nothing changed at all!
@@ -216,7 +211,7 @@ fit1_s2 <- fitHMM(BlacktipBData,
                   retryFits=10)
 ```
 
-  *- Now let's go further and include a high perturbation in one of the initial values (instead of .1 and .3, let's do .1 and 2). Do we still have similar estimated coefficients and log likelihood? (no matter the initial values, the coefficients should be similar).*
+  **- Now let's go further and include a high perturbation in one of the initial values (instead of .1 and .3, let's do .1 and 2). Do we still have similar estimated coefficients and log likelihood? (no matter the initial values, the coefficients should be similar).**
 
 
 ```{r, eval=F}
@@ -226,7 +221,7 @@ fit1_s2 <- fitHMM(BlacktipBData,
                   Par0 = list(ODBA=c(.1,1,1,1)))
 ```
 
-  - *Now that we've seen this candidate model seems to be "robust":  Is there any behaviour that predominates over the other? What about the ACF? Did the model captured properly the conditional independence between observations? (Seems to not be the case).*
+  **- Now that we've seen this candidate model seems to be "robust":  Is there any behaviour that predominates over the other? What about the ACF? Did the model captured properly the conditional independence between observations? (Seems to not be the case).**
 
 ```{r}
 
@@ -234,7 +229,7 @@ knitr::include_graphics("fit1_PR.png")
 
 ```
 
-  *- Most likely sequence: What can we infer from this? is there something else we can say from this? According to fitted model, can we see if there is any interesting pattern?*
+  **- Most likely sequence: What can we infer from this? is there something else we can say from this? According to fitted model, can we see if there is any interesting pattern?**
 
 ```{r}
 
@@ -252,7 +247,7 @@ BlacktipB %>% mutate(day = day(Time)) %>% ggplot(aes(Time,state)) + facet_wrap(~
 
 # Incorporating covariates
 
-  *- Now let's incorporate more information: time (second of the day). Let's include it as a covariate in the transition probabilities.*
+  **- Now let's incorporate more information: time (second of the day). Let's include it as a covariate in the transition probabilities.**
 
 
 As in the article of Vianey, we can incorporate other information that may help explain the values of ODBA. In this case, we are considering the second of the day of every observation. Time of day is represented by two trigonometric functions with period 24 h, $cos(2\pi t/86,400)$ and $sin(2\pi t/86,400)$ (86 400 is the number of seconds in a day). Using the function cosinor, we can 
@@ -293,7 +288,7 @@ knitr::include_graphics("fit2_tp.png")
 
 Let's explore the results.
 
-  *- Did the likelihood had a greater value? Did the coefficients vary to much? What about the ACF? Did the autocorrelation decreased with this innovation?*
+  **- Did the likelihood had a greater value? Did the coefficients vary to much? What about the ACF? Did the autocorrelation decreased with this innovation?**
 
 ```{r}
 
@@ -314,10 +309,10 @@ AIC(fit2)
 
 # Depth Data
 
-*4. Depth data:*
+**4. Depth data:**
 
-  *- what it is?*
-  *- tiger shark data: variables. Stream data to consider: absolute change in depth. (`abs_change_depth`)*
+  **- what it is?**
+  **- tiger shark data: variables. Stream data to consider: absolute change in depth. (`abs_change_depth`)**
 
 ```{r}
 
@@ -344,9 +339,9 @@ tigerShark %>% filter(days != 9) %>%
 
 # Hierarchical Hidden Markov models
 
-*5. Hidden Markov models*
-  *- Two possible levels to explain behavior: coarse state-level (day) and fine state-level (10 min).*
-  *- Data processing. We need to include a new column called "level". With this, momentuHMM will recognize the levels*
+**5. Hidden Markov models**
+  **- Two possible levels to explain behavior: coarse state-level (day) and fine state-level (10 min).**
+  **- Data processing. We need to include a new column called "level". With this, momentuHMM will recognize the levels**
   
 ```{r}
 
@@ -375,11 +370,11 @@ summary(tigerSharkData, dataNames = names(tigerSharkData)[-1])
 
 ```
 
-  *- How many behavior states (production process) for each possible coarse state value (internal process)? Let's choose three*
+  **- How many behavior states (production process) for each possible coarse state value (internal process)? Let's choose three**
 
 
-  *- Setting everything for the HHMM*
-    *- hierarchy*
+  **- Setting everything for the HHMM**
+    **- hierarchy**
 
 ```{r}
 
@@ -413,7 +408,7 @@ hierStates <- data.tree::as.Node(list(name="tiger shark HHMM states",
 
 ```
 
-  *- data stream distribution*
+  **- data stream distribution**
 
 The name for any of the “children” added to a node are user-specified and are akin
 to the stateNames argument in fitHMM for a standard HMM. While these names are
@@ -432,8 +427,8 @@ plot(hierDist)
 
 ```
 
-  *- hierarchical t.p.m formula (no covariates)*
-  *- hierarchical initial distribution formula (no covariates)*
+  **- hierarchical t.p.m formula (no covariates)**
+  **- hierarchical initial distribution formula (no covariates)**
 
 The Node attribute dist is required in hierDist and specifies the probability dis-
 tribution for each data stream at each level of the hierarchy (Figure 14. In this case,
@@ -461,7 +456,7 @@ hierFormulaDelta$AddChild(name="level2", formulaDelta=~1)
 
 ```
 
-  *- starting values for the behaviour distributions (we will assume the data stream probability distributions do not depend on the coarse-scale state. What does this mean? state 1 and 4 will have the same state-dependent distribution, so the parameters will be equal. Analogous for 2 and 5, and 3 and 6).*
+  **- starting values for the behaviour distributions (we will assume the data stream probability distributions do not depend on the coarse-scale state. What does this mean? state 1 and 4 will have the same state-dependent distribution, so the parameters will be equal. Analogous for 2 and 5, and 3 and 6).**
 
 assume the data stream probability distributions do not
 depend on the coarse-scale state, so we can constrain the state-dependent parameters
@@ -515,7 +510,7 @@ checkPar0(tigerSharkData,hierStates=hierStates,hierDist=hierDist,Par0=Par,
 
 ```
 
-  *- Interpretation of estimated coefficients*
+  **- Interpretation of estimated coefficients**
 
 
 ```{r,eval=F}
@@ -538,8 +533,8 @@ hhmm
 
 # Exercises
 
-*4. Exercises*
-  *- Generate new data streams from original datasets (overall mean in different time periods). Does the ACF changes between these data sets? How are they compared to the original data set? What can you say about this?*
+**4. Exercises**
+  **- Generate new data streams from original datasets (overall mean in different time periods). Does the ACF changes between these data sets? How are they compared to the original data set? What can you say about this?**
 
 - Instead of considering observations every second, create a new data set for 10 sec, another for 30 s and 1 min. Code below will generate such data sets. Fit a basic HMM for the each one of these new datasets. Did the ACF changed? does they seems to not break the conditional independence? (i.e., the ACF values are lower?). 
 
@@ -580,7 +575,7 @@ BlacktipB = BlacktipB %>% select(Time,Depth,ODBA,hour_to_sec)
 ```
 
 
-  *- Fit a 3-stated HMM with no covariates and fit another one taking time as a covariate. What happents to the ACF? According to loglikelihood and AIC, which model is better?*
+  **- Fit a 3-stated HMM with no covariates and fit another one taking time as a covariate. What happents to the ACF? According to loglikelihood and AIC, which model is better?**
 
 
 - Reproduce the analysis from the black tip shark data, but now include three states. What about the ACF? Did something change compared to 2-state HMM? Now include hour_to_sec as a covariate and fit a new model. What happen with the AIC values and the loglikelihood? According to these, what seems to be a better model?
